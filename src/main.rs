@@ -5,10 +5,12 @@ use std::{
     str::Utf8Error,
 };
 
-use gl::{
-    types::{GLenum},
-};
+use gl::types::GLenum;
 use glfw::{Action, Context, GlfwReceiver, Key, OpenGlProfileHint, WindowHint};
+
+use crate::shader::Shader;
+
+mod shader;
 
 // https://learnopengl.com/Getting-started/Hello-Triangle
 
@@ -43,39 +45,7 @@ fn main() {
     println!("OpenGL version: {}", glfw::get_version_string());
     println!("Renderer: {}", get_string(gl::RENDERER).unwrap());
 
-    let shader_program = unsafe {
-        let vertex_shader = gl::CreateShader(gl::VERTEX_SHADER);
-        let c_string = CString::new(VERTEX_SHADER_SOURCE.as_bytes()).unwrap();
-        gl::ShaderSource(vertex_shader, 1, &c_string.as_ptr(), ptr::null());
-        gl::CompileShader(vertex_shader);
-
-        let fragment_shader = gl::CreateShader(gl::FRAGMENT_SHADER);
-        let c_string = CString::new(FRAGMENT_SHADER_SOURCE.as_bytes()).unwrap();
-        gl::ShaderSource(fragment_shader, 1, &c_string.as_ptr(), ptr::null());
-        gl::CompileShader(fragment_shader);
-
-        let shader_program = gl::CreateProgram();
-        gl::AttachShader(shader_program, vertex_shader);
-        gl::AttachShader(shader_program, fragment_shader);
-        gl::LinkProgram(shader_program);
-
-        // let mut info_log = Vec::with_capacity(512);
-        // gl::GetProgramInfoLog(
-        //     shader_program,
-        //     512,
-        //     ptr::null_mut(),
-        //     info_log.as_mut_ptr() as *mut GLchar,
-        // );
-        // println!("ProgramInfoLog\n{}", str::from_utf8(&info_log).unwrap());
-
-        gl::DeleteShader(fragment_shader);
-        gl::DeleteShader(vertex_shader);
-
-        // let mut success: GLint = 0;
-        // gl::GetShaderiv(vertex_shader, gl::COMPILE_STATUS, &mut success);
-        // println!("success = {success}");
-        shader_program
-    };
+    let shader = Shader::from_files("./shaders/1.vert", "./shaders/1.frag");
 
     let (vao, _, _) = unsafe {
         #[rustfmt::skip]
@@ -148,7 +118,8 @@ fn main() {
             gl::ClearColor(1.0, 1.0, 1.0, 0.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
-            gl::UseProgram(shader_program);
+            // gl::UseProgram(shader_program);
+            shader.use_program();
             gl::BindVertexArray(vao);
 
             // gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
