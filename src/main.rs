@@ -1,12 +1,12 @@
 use core::str;
 use std::{
-    ffi::{CString, c_void},
+    ffi::{CStr, CString},
     ptr,
+    str::Utf8Error,
 };
 
 use gl::{
-    Viewport,
-    types::{GLchar, GLint, GLsizeiptr},
+    types::{GLenum},
 };
 use glfw::{Action, Context, GlfwReceiver, Key, OpenGlProfileHint, WindowHint};
 
@@ -15,13 +15,20 @@ use glfw::{Action, Context, GlfwReceiver, Key, OpenGlProfileHint, WindowHint};
 const VERTEX_SHADER_SOURCE: &str = include_str!("../shaders/1.vert");
 const FRAGMENT_SHADER_SOURCE: &str = include_str!("../shaders/1.frag");
 
+fn get_string(value: GLenum) -> Result<String, Utf8Error> {
+    unsafe {
+        let raw_ptr = gl::GetString(value);
+        CStr::from_ptr(raw_ptr as _)
+            .to_str()
+            .map(|it| it.to_string())
+    }
+}
+
 fn main() {
     let mut glfw = glfw::init(glfw::fail_on_errors).expect("unable to initialize glfw");
 
     glfw.window_hint(WindowHint::ContextVersion(3, 3));
     glfw.window_hint(WindowHint::OpenGlProfile(OpenGlProfileHint::Core));
-
-    println!("Opengl version: {}", glfw::get_version_string());
 
     let (mut window, events) = glfw
         .create_window(800, 600, "title", glfw::WindowMode::Windowed)
@@ -32,6 +39,9 @@ fn main() {
     window.set_framebuffer_size_polling(true);
 
     gl::load_with(|symbol| window.get_proc_address(symbol).unwrap() as *const _);
+
+    println!("OpenGL version: {}", glfw::get_version_string());
+    println!("Renderer: {}", get_string(gl::RENDERER).unwrap());
 
     let shader_program = unsafe {
         let vertex_shader = gl::CreateShader(gl::VERTEX_SHADER);
@@ -67,19 +77,15 @@ fn main() {
         shader_program
     };
 
-    let (vao, vbo, ebo) = unsafe {
+    let (vao, _, _) = unsafe {
         #[rustfmt::skip]
-        let vertices: [f32; 12] = [
-            0.0,  0.5, 0.0,
-            0.5, -0.5, 0.0,
-            -0.5, -0.5, 0.0,
-            0.0,  -0.8, 0.0,
+        let vertices: [f32; 18] = [
+             0.0,  0.5,  0.0,  1.0,  0.0,  0.0,
+             0.5, -0.5,  0.0,  0.0,  1.0,  0.0,
+            -0.5, -0.5,  0.0,  0.0,  0.0,  1.0,
         ];
 
-        let indices: [u32; 6] = [
-            0, 1, 2,
-            1, 2, 3
-        ];
+        // let indices: [u32; 6] = [0, 1, 2, 1, 2, 3];
 
         let mut vbo = 0;
         gl::GenBuffers(1, &mut vbo);
@@ -93,12 +99,12 @@ fn main() {
         gl::GenBuffers(1, &mut ebo);
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
 
-        gl::BufferData(
-            gl::ELEMENT_ARRAY_BUFFER,
-            (indices.len() * size_of::<u32>()) as _,
-            &indices[0] as *const _ as _, // fuck
-            gl::STATIC_DRAW,
-        );
+        // gl::BufferData(
+        //     gl::ELEMENT_ARRAY_BUFFER,
+        //     (indices.len() * size_of::<u32>()) as _,
+        //     &indices[0] as *const _ as _, // fuck
+        //     gl::STATIC_DRAW,
+        // );
 
         gl::BufferData(
             gl::ARRAY_BUFFER,
@@ -107,17 +113,31 @@ fn main() {
             gl::STATIC_DRAW,
         );
 
+        // position
         gl::VertexAttribPointer(
             0,
             3,
             gl::FLOAT,
             gl::FALSE,
-            3 * size_of::<f32>() as i32,
+            6 * size_of::<f32>() as i32,
             // &0 as *const _ as _,
             ptr::null(),
         );
-
         gl::EnableVertexAttribArray(0);
+
+        // color
+        gl::VertexAttribPointer(
+            1,
+            3,
+            gl::FLOAT,
+            gl::FALSE,
+            6 * size_of::<f32>() as i32,
+            (3 * size_of::<f32>()) as *const _,
+        );
+        gl::EnableVertexAttribArray(1);
+
+        // gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
+
         (vao, vbo, ebo)
     };
 
@@ -129,10 +149,11 @@ fn main() {
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
             gl::UseProgram(shader_program);
-            // gl::BindVertexArray(vao);
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
-            // gl::DrawArrays(gl::TRIANGLES, 0, 3);
-            gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
+            gl::BindVertexArray(vao);
+
+            // gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
+            gl::DrawArrays(gl::TRIANGLES, 0, 3);
+            // gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
         }
 
         window.swap_buffers();
