@@ -67,24 +67,39 @@ fn main() {
         shader_program
     };
 
-    let (vao, vbo) = unsafe {
+    let (vao, vbo, ebo) = unsafe {
         #[rustfmt::skip]
-        let vertices: [f32; 9] = [
+        let vertices: [f32; 12] = [
             0.0,  0.5, 0.0,
             0.5, -0.5, 0.0,
             -0.5, -0.5, 0.0,
+            0.0,  -0.8, 0.0,
+        ];
+
+        let indices: [u32; 6] = [
+            0, 1, 2,
+            1, 2, 3
         ];
 
         let mut vbo = 0;
-        let mut vao = 0;
-
         gl::GenBuffers(1, &mut vbo);
-        // println!("vbo: {vbo}");
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
 
+        let mut vao = 0;
         gl::GenVertexArrays(1, &mut vao);
         gl::BindVertexArray(vao);
 
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+        let mut ebo = 0;
+        gl::GenBuffers(1, &mut ebo);
+        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
+
+        gl::BufferData(
+            gl::ELEMENT_ARRAY_BUFFER,
+            (indices.len() * size_of::<u32>()) as _,
+            &indices[0] as *const _ as _, // fuck
+            gl::STATIC_DRAW,
+        );
+
         gl::BufferData(
             gl::ARRAY_BUFFER,
             (vertices.len() * size_of::<f32>()) as _,
@@ -99,23 +114,25 @@ fn main() {
             gl::FALSE,
             3 * size_of::<f32>() as i32,
             // &0 as *const _ as _,
-            ptr::null()
+            ptr::null(),
         );
 
         gl::EnableVertexAttribArray(0);
-        (vao, vbo)
+        (vao, vbo, ebo)
     };
 
     while !window.should_close() {
         process_events(&mut window, &events);
 
         unsafe {
-            gl::ClearColor(0.4, 0.4, 0.4, 0.0);
+            gl::ClearColor(1.0, 1.0, 1.0, 0.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
-        
+
             gl::UseProgram(shader_program);
-            gl::BindVertexArray(vao);
-            gl::DrawArrays(gl::TRIANGLES, 0, 3);
+            // gl::BindVertexArray(vao);
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
+            // gl::DrawArrays(gl::TRIANGLES, 0, 3);
+            gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
         }
 
         window.swap_buffers();
