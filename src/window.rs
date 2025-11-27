@@ -1,7 +1,6 @@
 use std::error::Error;
 use std::ffi::{CStr, CString};
 use std::num::NonZeroU32;
-use std::ops::Deref;
 
 use gl::types::GLfloat;
 use raw_window_handle::HasWindowHandle;
@@ -21,7 +20,7 @@ use glutin::surface::{Surface, SwapInterval, WindowSurface};
 
 use glutin_winit::{DisplayBuilder, GlWindow};
 
-pub fn launch(event_loop: winit::event_loop::EventLoop<()>) -> Result<(), Box<dyn Error>> {
+pub fn run<R: Renderer>(event_loop: winit::event_loop::EventLoop<()>) -> Result<(), Box<dyn Error>> {
     // The template will match only the configurations supporting rendering
     // to windows.
     //
@@ -36,13 +35,13 @@ pub fn launch(event_loop: winit::event_loop::EventLoop<()>) -> Result<(), Box<dy
 
     let display_builder = DisplayBuilder::new().with_window_attributes(Some(window_attributes()));
 
-    let mut app = App::new(template, display_builder);
+    let mut app = AppHandler::<R>::new(template, display_builder);
     event_loop.run_app(&mut app)?;
 
     app.exit_state
 }
 
-impl ApplicationHandler for App {
+impl<R: Renderer> ApplicationHandler for AppHandler<R> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let (window, gl_config) = match &self.gl_display {
             // We just created the event loop, so initialize the display, pick the config, and
@@ -182,22 +181,21 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
-        // NOTE: The handling below is only needed due to nvidia on Wayland to not crash
-        // on exit due to nvidia driver touching the Wayland display from on
-        // `exit` hook.
-        let _gl_display = self.gl_context.take().unwrap().display();
-
-        // Clear the window.
-        self.state = None;
-        #[cfg(egl_backend)]
-        #[allow(irrefutable_let_patterns)]
-        if let glutin::display::Display::Egl(display) = _gl_display {
-            unsafe {
-                display.terminate();
-            }
-        }
-    }
+    // fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+    //     // NOTE: The handling below is only needed due to nvidia on Wayland to not crash
+    //     // on exit due to nvidia driver touching the Wayland display from on
+    //     // `exit` hook.
+    //     let _gl_display = self.gl_context.take().unwrap().display();
+    //     // Clear the window.
+    //     self.state = None;
+    //     #[cfg(egl_backend)]
+    //     #[allow(irrefutable_let_patterns)]
+    //     if let glutin::display::Display::Egl(display) = _gl_display {
+    //         unsafe {
+    //             display.terminate();
+    //         }
+    //     }
+    // }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(AppState { gl_surface, window }) = self.state.as_ref() {
@@ -262,9 +260,9 @@ enum GlDisplayCreationState {
     Init,
 }
 
-struct App {
+struct AppHandler<R: Renderer> {
     template: ConfigTemplateBuilder,
-    renderer: Option<Renderer>,
+    renderer: Option<R>,
     // NOTE: `AppState` carries the `Window`, thus it should be dropped after everything else.
     state: Option<AppState>,
     gl_context: Option<PossiblyCurrentContext>,
@@ -272,7 +270,7 @@ struct App {
     exit_state: Result<(), Box<dyn Error>>,
 }
 
-impl App {
+impl<R: Renderer> AppHandler<R> {
     fn new(template: ConfigTemplateBuilder, display_builder: DisplayBuilder) -> Self {
         Self {
             template,
@@ -309,179 +307,13 @@ pub fn gl_config_picker(configs: Box<dyn Iterator<Item = Config> + '_>) -> Confi
         .unwrap()
 }
 
-pub struct Renderer {
-    program: gl::types::GLuint,
-    vao: gl::types::GLuint,
-    vbo: gl::types::GLuint,
+
+pub trait Renderer {
+    fn new<D: GlDisplay>(gl_display: &D) -> Self;
+
+    fn draw(&self);
+
+    fn resize(&self, width: i32, height: i32);
 }
 
-impl Renderer {
-    pub fn new<D: GlDisplay>(gl_display: &D) -> Self {
-        unsafe {
-            gl::load_with(|symbol| {
-                let symbol = CString::new(symbol).unwrap();
-                gl_display.get_proc_address(symbol.as_c_str()).cast()
-            });
 
-            if let Some(renderer) = get_gl_string(gl::RENDERER) {
-                println!("Running on {}", renderer.to_string_lossy());
-            }
-            if let Some(version) = get_gl_string(gl::VERSION) {
-                println!("OpenGL Version {}", version.to_string_lossy());
-            }
-
-            if let Some(shaders_version) = get_gl_string(gl::SHADING_LANGUAGE_VERSION) {
-                println!("Shaders version on {}", shaders_version.to_string_lossy());
-            }
-
-            let vertex_shader = create_shader(gl::VERTEX_SHADER, VERTEX_SHADER_SOURCE);
-            let fragment_shader = create_shader(gl::FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE);
-
-            let program = gl::CreateProgram();
-
-            gl::AttachShader(program, vertex_shader);
-            gl::AttachShader(program, fragment_shader);
-
-            gl::LinkProgram(program);
-
-            gl::UseProgram(program);
-
-            gl::DeleteShader(vertex_shader);
-            gl::DeleteShader(fragment_shader);
-
-            let mut vao = std::mem::zeroed();
-            gl::GenVertexArrays(1, &mut vao);
-            gl::BindVertexArray(vao);
-
-            let mut vbo = std::mem::zeroed();
-            gl::GenBuffers(1, &mut vbo);
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                (VERTEX_DATA.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,
-                VERTEX_DATA.as_ptr() as *const _,
-                gl::STATIC_DRAW,
-            );
-
-            let pos_attrib = gl::GetAttribLocation(program, c"position".as_ptr() as *const _);
-            let color_attrib = gl::GetAttribLocation(program, c"color".as_ptr() as *const _);
-            gl::VertexAttribPointer(
-                pos_attrib as gl::types::GLuint,
-                2,
-                gl::FLOAT,
-                0,
-                5 * std::mem::size_of::<f32>() as gl::types::GLsizei,
-                std::ptr::null(),
-            );
-            gl::VertexAttribPointer(
-                color_attrib as gl::types::GLuint,
-                3,
-                gl::FLOAT,
-                0,
-                5 * std::mem::size_of::<f32>() as gl::types::GLsizei,
-                (2 * std::mem::size_of::<f32>()) as *const () as *const _,
-            );
-            gl::EnableVertexAttribArray(pos_attrib as gl::types::GLuint);
-            gl::EnableVertexAttribArray(color_attrib as gl::types::GLuint);
-
-            Self {
-                program,
-                vao,
-                vbo,
-            }
-        }
-    }
-
-    pub fn draw(&self) {
-        self.draw_with_clear_color(0.1, 0.1, 0.1, 0.9)
-    }
-
-    pub fn draw_with_clear_color(
-        &self,
-        red: GLfloat,
-        green: GLfloat,
-        blue: GLfloat,
-        alpha: GLfloat,
-    ) {
-        unsafe {
-            gl::UseProgram(self.program);
-
-            gl::BindVertexArray(self.vao);
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
-
-            gl::ClearColor(red, green, blue, alpha);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
-            gl::DrawArrays(gl::TRIANGLES, 0, 3);
-        }
-    }
-
-    pub fn resize(&self, width: i32, height: i32) {
-        unsafe {
-            gl::Viewport(0, 0, width, height);
-        }
-    }
-}
-
-impl Drop for Renderer {
-    fn drop(&mut self) {
-        unsafe {
-            gl::DeleteProgram(self.program);
-            gl::DeleteBuffers(1, &self.vbo);
-            gl::DeleteVertexArrays(1, &self.vao);
-        }
-    }
-}
-
-unsafe fn create_shader(shader: gl::types::GLenum, source: &[u8]) -> gl::types::GLuint {
-    unsafe {
-        let shader = gl::CreateShader(shader);
-        gl::ShaderSource(
-            shader,
-            1,
-            [source.as_ptr().cast()].as_ptr(),
-            std::ptr::null(),
-        );
-        gl::CompileShader(shader);
-        shader
-    }
-}
-
-fn get_gl_string(variant: gl::types::GLenum) -> Option<&'static CStr> {
-    unsafe {
-        let s = gl::GetString(variant);
-        (!s.is_null()).then(|| CStr::from_ptr(s.cast()))
-    }
-}
-
-#[rustfmt::skip]
-static VERTEX_DATA: [f32; 15] = [
-    -0.5, -0.5,  1.0,  0.0,  0.0,
-     0.0,  0.5,  0.0,  1.0,  0.0,
-     0.5, -0.5,  0.0,  0.0,  1.0,
-];
-
-const VERTEX_SHADER_SOURCE: &[u8] = b"
-#version 100
-precision mediump float;
-
-attribute vec2 position;
-attribute vec3 color;
-
-varying vec3 v_color;
-
-void main() {
-    gl_Position = vec4(position, 0.0, 1.0);
-    v_color = color;
-}
-\0";
-
-const FRAGMENT_SHADER_SOURCE: &[u8] = b"
-#version 100
-precision mediump float;
-
-varying vec3 v_color;
-
-void main() {
-    gl_FragColor = vec4(v_color, 1.0);
-}
-\0";

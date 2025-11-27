@@ -14,10 +14,11 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::{shader::Shader};
+use crate::{chapters::winit_example::Renderer1, shader::Shader};
 
 mod shader;
 mod window;
+mod chapters;
 
 // https://learnopengl.com/Getting-started/Hello-Triangle
 
@@ -42,7 +43,7 @@ fn get_string(value: GLenum) -> Result<String, Utf8Error> {
 // }
 
 fn main() {
-    window::launch(EventLoop::new().unwrap());
+    window::run::<Renderer1>(EventLoop::new().unwrap());
 }
 
 fn main22() {
