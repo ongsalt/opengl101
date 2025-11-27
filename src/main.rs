@@ -7,10 +7,17 @@ use std::{
 
 use gl::types::GLenum;
 use glfw::{Action, Context, GlfwReceiver, Key, OpenGlProfileHint, WindowHint};
+use winit::{
+    application::ApplicationHandler,
+    event::WindowEvent,
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    window::{Window, WindowId},
+};
 
-use crate::shader::Shader;
+use crate::{shader::Shader};
 
 mod shader;
+mod window;
 
 // https://learnopengl.com/Getting-started/Hello-Triangle
 
@@ -26,7 +33,19 @@ fn get_string(value: GLenum) -> Result<String, Utf8Error> {
     }
 }
 
+// fn main2() {
+//     let event_loop = EventLoop::new().unwrap();
+//     event_loop.set_control_flow(ControlFlow::Wait);
+    
+//     let mut app = App::new();
+//     event_loop.run_app(&mut app).unwrap();
+// }
+
 fn main() {
+    window::launch(EventLoop::new().unwrap());
+}
+
+fn main22() {
     let mut glfw = glfw::init(glfw::fail_on_errors).expect("unable to initialize glfw");
 
     glfw.window_hint(WindowHint::ContextVersion(3, 3));
