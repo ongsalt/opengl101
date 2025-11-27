@@ -106,7 +106,7 @@ impl Renderer for Renderer1 {
     }
 
     fn draw(&self) {
-        self.draw_with_clear_color(0.1, 0.1, 0.1, 0.9)
+        self.draw_with_clear_color(0.1, 0.1, 0.1, 0.0)
     }
 
     fn resize(&self, width: i32, height: i32) {

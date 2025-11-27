@@ -43,7 +43,7 @@ fn get_string(value: GLenum) -> Result<String, Utf8Error> {
 // }
 
 fn main() {
-    window::run::<Renderer1>(EventLoop::new().unwrap());
+    window::run::<Renderer1>();
 }
 
 fn main22() {

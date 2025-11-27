@@ -1,12 +1,10 @@
 use std::error::Error;
-use std::ffi::{CStr, CString};
 use std::num::NonZeroU32;
 
-use gl::types::GLfloat;
 use raw_window_handle::HasWindowHandle;
 use winit::application::ApplicationHandler;
 use winit::event::{KeyEvent, WindowEvent};
-use winit::event_loop::ActiveEventLoop;
+use winit::event_loop::{self, ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowAttributes};
 
@@ -20,7 +18,9 @@ use glutin::surface::{Surface, SwapInterval, WindowSurface};
 
 use glutin_winit::{DisplayBuilder, GlWindow};
 
-pub fn run<R: Renderer>(event_loop: winit::event_loop::EventLoop<()>) -> Result<(), Box<dyn Error>> {
+pub fn run<R: Renderer>() -> Result<(), Box<dyn Error>> {
+    let event_loop = EventLoop::new().unwrap();
+
     // The template will match only the configurations supporting rendering
     // to windows.
     //
@@ -33,12 +33,30 @@ pub fn run<R: Renderer>(event_loop: winit::event_loop::EventLoop<()>) -> Result<
         .with_alpha_size(8)
         .with_transparency(true);
 
-    let display_builder = DisplayBuilder::new().with_window_attributes(Some(window_attributes()));
+    let display_builder =
+        DisplayBuilder::new().with_window_attributes(Some(window_attributes("idk")));
 
     let mut app = AppHandler::<R>::new(template, display_builder);
     event_loop.run_app(&mut app)?;
 
     app.exit_state
+}
+
+#[cfg(target_os = "windows")]
+fn window_attributes(title: &str) -> WindowAttributes {
+    use winit::platform::windows::{BackdropType, WindowAttributesExtWindows};
+
+    Window::default_attributes()
+        .with_transparent(true)
+        .with_title(title)
+        .with_system_backdrop(BackdropType::MainWindow)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn window_attributes(title: &str) -> WindowAttributes {
+    Window::default_attributes()
+        // .with_transparent(true)
+        .with_title(title)
 }
 
 impl<R: Renderer> ApplicationHandler for AppHandler<R> {
@@ -76,7 +94,11 @@ impl<R: Renderer> ApplicationHandler for AppHandler<R> {
                 println!("Recreating window in `resumed`");
                 // Pick the config which we already use for the context.
                 let gl_config = self.gl_context.as_ref().unwrap().config();
-                match glutin_winit::finalize_window(event_loop, window_attributes(), &gl_config) {
+                match glutin_winit::finalize_window(
+                    event_loop,
+                    window_attributes("idk"), // oh come onnn
+                    &gl_config,
+                ) {
                     Ok(window) => (window, gl_config),
                     Err(err) => {
                         self.exit_state = Err(err.into());
@@ -147,16 +169,14 @@ impl<R: Renderer> ApplicationHandler for AppHandler<R> {
         event: WindowEvent,
     ) {
         match event {
-            WindowEvent::Resized(size) if size.width != 0 && size.height != 0 => {
+            // why tf do this use so much memory
+            WindowEvent::Resized(size) => {
                 // Some platforms like EGL require resizing GL surface to update the size
                 // Notable platforms here are Wayland and macOS, other don't require it
                 // and the function is no-op, but it's wise to resize it for portability
                 // reasons.
-                if let Some(AppState {
-                    gl_surface,
-                    window: _,
-                }) = self.state.as_ref()
-                {
+                if let Some(AppState { gl_surface, .. }) = self.state.as_ref() {
+                    // println!("Wayland | macOS: resize");
                     let gl_context = self.gl_context.as_ref().unwrap();
                     gl_surface.resize(
                         gl_context,
@@ -166,6 +186,7 @@ impl<R: Renderer> ApplicationHandler for AppHandler<R> {
 
                     let renderer = self.renderer.as_ref().unwrap();
                     renderer.resize(size.width as i32, size.height as i32);
+                    // window.request_redraw();
                 }
             }
             WindowEvent::CloseRequested
@@ -181,21 +202,21 @@ impl<R: Renderer> ApplicationHandler for AppHandler<R> {
         }
     }
 
-    // fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
-    //     // NOTE: The handling below is only needed due to nvidia on Wayland to not crash
-    //     // on exit due to nvidia driver touching the Wayland display from on
-    //     // `exit` hook.
-    //     let _gl_display = self.gl_context.take().unwrap().display();
-    //     // Clear the window.
-    //     self.state = None;
-    //     #[cfg(egl_backend)]
-    //     #[allow(irrefutable_let_patterns)]
-    //     if let glutin::display::Display::Egl(display) = _gl_display {
-    //         unsafe {
-    //             display.terminate();
-    //         }
-    //     }
-    // }
+    fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        // NOTE: The handling below is only needed due to nvidia on Wayland to not crash
+        // on exit due to nvidia driver touching the Wayland display from on
+        // `exit` hook.
+        let _gl_display = self.gl_context.take().unwrap().display();
+        // Clear the window.
+        self.state = None;
+        #[cfg(egl_backend)]
+        #[allow(irrefutable_let_patterns)]
+        if let glutin::display::Display::Egl(display) = _gl_display {
+            unsafe {
+                display.terminate();
+            }
+        }
+    }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(AppState { gl_surface, window }) = self.state.as_ref() {
@@ -246,13 +267,6 @@ fn create_gl_context(window: &Window, gl_config: &Config) -> NotCurrentContext {
             })
     }
 }
-
-fn window_attributes() -> WindowAttributes {
-    Window::default_attributes()
-        .with_transparent(true)
-        .with_title("Glutin triangle gradient example (press Escape to exit)")
-}
-
 enum GlDisplayCreationState {
     /// The display was not build yet.
     Builder(Box<DisplayBuilder>),
@@ -307,7 +321,6 @@ pub fn gl_config_picker(configs: Box<dyn Iterator<Item = Config> + '_>) -> Confi
         .unwrap()
 }
 
-
 pub trait Renderer {
     fn new<D: GlDisplay>(gl_display: &D) -> Self;
 
@@ -315,5 +328,3 @@ pub trait Renderer {
 
     fn resize(&self, width: i32, height: i32);
 }
-
-
