@@ -3,7 +3,7 @@ mod winit_window;
 mod chapters;
 mod glfw;
 mod shared;
-
+mod extension;
 
 // fn main2() {
 //     let event_loop = EventLoop::new().unwrap();
@@ -15,5 +15,5 @@ mod shared;
 
 fn main() {
     // winit_window::run::<Renderer1>();
-    chapters::triangle::run();
+    chapters::texture::run();
 }
