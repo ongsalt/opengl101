@@ -3,7 +3,7 @@ use std::ffi::{CStr, CString};
 use gl::types::GLfloat;
 use glutin::prelude::GlDisplay;
 
-use crate::window::Renderer;
+use crate::winit_window::Renderer;
 
 pub struct Renderer1 {
     program: gl::types::GLuint,
