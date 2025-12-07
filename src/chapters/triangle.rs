@@ -1,5 +1,6 @@
 use std::ptr;
 
+use gl::CreateBuffers;
 use glfw::{Action, Context, GlfwReceiver, Key, OpenGlProfileHint, WindowHint};
 
 use crate::{glfw::process_events, shader::Shader, shared::get_string};
@@ -78,8 +79,17 @@ pub fn run() {
         (vao, vbo, ebo)
     };
 
+    // let offset_handle = {
+    //     let offset_handle = 0;
+    //     CreateBuffers(1, &mut offset_handle);
+    // };
+
     while !window.should_close() {
         process_events(&mut window, &events);
+
+        let time_value = glfw.get_time() as f32;
+        let offset = (time_value - time_value.floor()) * 2.0 - 1.0;
+        shader.set_f32("offset", offset);
 
         unsafe {
             gl::ClearColor(1.0, 1.0, 1.0, 0.0);

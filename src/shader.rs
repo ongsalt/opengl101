@@ -55,25 +55,28 @@ impl Shader {
         }
     }
 
-    pub fn set_bool(&mut self, key: &str, value: bool) {
+    pub fn set_bool(&self, key: &str, value: bool) {
         self.set_i32(key, value as i32);
     }
 
-    pub fn set_i32(&mut self, key: &str, value: i32) {
+    pub fn set_i32(&self, key: &str, value: i32) {
+        let c_str = CString::new(key).unwrap();
         unsafe {
-            gl::Uniform1i(
-                gl::GetUniformLocation(self.id, key.as_ptr() as _),
-                value as i32,
-            );
+            gl::Uniform1i(gl::GetUniformLocation(self.id, c_str.as_ptr()), value);
         }
     }
 
-    pub fn set_f32(&mut self, key: &str, value: f32) {
+    pub fn set_f32(&self, key: &str, value: f32) {
+        let c_str = CString::new(key).unwrap();
         unsafe {
-            gl::Uniform1f(
-                gl::GetUniformLocation(self.id, key.as_ptr() as _),
-                value as f32,
-            );
+            gl::Uniform1f(gl::GetUniformLocation(self.id, c_str.as_ptr()), value);
+        }
+    }
+
+    pub fn set_vec4(&self, key: &str, x: f32, y: f32, z: f32, w: f32) {
+        let c_str = CString::new(key).unwrap();
+        unsafe {
+            gl::Uniform4f(gl::GetUniformLocation(self.id, c_str.as_ptr()), x, y, z, w);
         }
     }
 }
